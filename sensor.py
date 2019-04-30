@@ -8,7 +8,7 @@ GPIO.setup(echo,GPIO.IN)
 
 def distance():
     GPIO.output(trig,False)
-    time.sleep(0.1)
+    time.sleep(0.5)
     GPIO.output(trig,True)
     time.sleep(0.00001)
     GPIO.output(trig,False)
