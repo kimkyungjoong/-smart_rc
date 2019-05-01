@@ -19,7 +19,7 @@ def draw_lanes(img, lines, color=[0, 255, 255], thickness=3):
             for ii in i:
                 ys += [ii[1], ii[3]]
         min_y = min(ys)
-        max_y = 600
+        max_y = 480
         new_lines = []
         line_dict = {}
 
