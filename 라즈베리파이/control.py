@@ -1,10 +1,10 @@
-import RPi.GPIO as GPIO  # ¶óÁîº£¸®ÆÄÀÌÀÇ GPIO ÇÉÀ» ÀÌ¿ëÇÏ±âÀ§ÇÑ ¸ğµâ Ãß°¡
+import RPi.GPIO as GPIO  # ë¼ì¦ˆë² ë¦¬íŒŒì´ì˜ GPIO í•€ì„ ì´ìš©í•˜ê¸°ìœ„í•œ ëª¨ë“ˆ ì¶”ê°€
 
-# ¸ğÅÍ »óÅÂ
+# ëª¨í„° ìƒíƒœ
 STOP = 0
 FORWARD = 1
 BACKWARD = 2
-# ¸ğÅÍ Ã¤³Î
+# ëª¨í„° ì±„ë„
 CH1 = 0
 CH2 = 1
 
@@ -13,70 +13,70 @@ INPUT = 0
 
 HIGH = 1
 LOW = 0
-# ¸ğÅÍµå¶óÀÌºê ¿¬°á ÇÉ Á¦¾îº¯¼ö
-# pwn ÇÉ
+# ëª¨í„°ë“œë¼ì´ë¸Œ ì—°ê²° í•€ ì œì–´ë³€ìˆ˜
+# pwn í•€
 ENA = 26  # 37 pin
 ENB = 0  # 27 pin
-# GPIO ÇÉ
+# GPIO í•€
 IN1 = 19  # 35 pin
 IN2 = 13  # 33 pin
 IN3 = 6  # 31 pin
 IN4 = 5  # 29 pi
 
 
-# ÇÉ¼³Á¤ ÇÔ¼ö
+# í•€ì„¤ì • í•¨ìˆ˜
 def setPinConfig(EN, INA, INB):
     GPIO.setup(EN, GPIO.OUT)
     GPIO.setup(INA, GPIO.OUT)
     GPIO.setup(INB, GPIO.OUT)
-    # pwnµ¿ÀÛ½ÃÀÛ
+    # pwnë™ì‘ì‹œì‘
     pwm = GPIO.PWM(EN, 100)
 
-    pwm.start(0)  # ¿ì¼± 0À¸·Î pwn¸ØÃã
+    pwm.start(0)  # ìš°ì„  0ìœ¼ë¡œ pwnë©ˆì¶¤
     return pwm
 
 
-# GPIO ¸ğµå ¼³Á¤
+# GPIO ëª¨ë“œ ì„¤ì •
 GPIO.setmode(GPIO.BCM)
-# ÇÉ ¼³Á¤ÈÄ pwnÇÚµé ¾ò¾î¿È °¢°¢ ¼­ºê¸ğÅÍ,¸ŞÀÎ¸ğÅÍ
+# í•€ ì„¤ì •í›„ pwní•¸ë“¤ ì–»ì–´ì˜´ ê°ê° ì¢Œ,ìš° ëª¨í„°
 pwmA = setPinConfig(ENA, IN1, IN2)
 pwmB = setPinConfig(ENB, IN3, IN4)
 
 
-def setMotorContorl(pwm, INA, INB, speed, stat):  # ÇÚµé¿¡ ÇöÀç ¿øÇÏ´Â »óÅÂ ¿Í ¼Óµµ Á¦¾î
-    pwm.ChangeDutyCycle(speed)  # ¸ğÅÍ ¼Óµµ Á¦¾î speed º¯¼ö »ç¿ë
+def setMotorContorl(pwm, INA, INB, speed, stat):  # í•¸ë“¤ì— í˜„ì¬ ì›í•˜ëŠ” ìƒíƒœ ì™€ ì†ë„ ì œì–´
+    pwm.ChangeDutyCycle(speed)  # ëª¨í„° ì†ë„ ì œì–´ speed ë³€ìˆ˜ ì‚¬ìš©
 
-    if stat == FORWARD:  # ÀüÁø
+    if stat == FORWARD:  #ì™¼ìª½ëª¨í„°ì „ì§„
         GPIO.output(INA, HIGH)
         GPIO.output(INB, LOW)
-    elif stat == BACKWARD:  # ÀüÁø
+    elif stat == BACKWARD:  # ì˜¤ë¥¸ìª½ëª¨í„°ì „ì§„
         GPIO.output(INA, LOW)
         GPIO.output(INB, HIGH)
 
 
-    elif stat == STOP:  # Á¤Áö
+    elif stat == STOP:  # ì •ì§€
         GPIO.output(INA, LOW)
         GPIO.output(INB, LOW)
 
 
 def setMotor(ch, speed, stat):
     if ch == CH1:
-        # ch1 = ¸ŞÀÎ¸ğÅÍ
+        # ch1 = ì˜¤ë¥¸ìª½ëª¨í„°
         setMotorContorl(pwmA, IN1, IN2, speed, stat)
     else:
-        # ch2 = ¼­ºê¸ğÅÍ
+        # ch2 =ëª¨í„°
         setMotorContorl(pwmB, IN3, IN4, speed, stat)
 
 
-def straight():  # ¼­ºê¸ğÅÍ,¸ŞÀÎ¸ğÅÍ Àû¿ë Á÷ÁøÇÔ¼ö
+def straight():  #ì§ì§„í•¨ìˆ˜
     setMotor(CH2, 20, FORWARD)
     setMotor(CH1, 20, BACKWARD)
-def right(k):  # ¼­ºê¸ğÅÍ,¸ŞÀÎ¸ğÅÍ Àû¿ë ÁÂÈ¸ÀüÇÔ¼ö
+def right(k):  #ì¢ŒíšŒì „í•¨ìˆ˜
     setMotor(CH2, 20, FORWARD)
     setMotor(CH1, 20 + k, BACKWARD)
-def left(k):  # ¼­ºê¸ğÅÍ,¸ŞÀÎ¸ğÅÍ Àû¿ë ¿ìÈ¸ÀüÇÔ¼ö
+def left(k):  # ìš°íšŒì „í•¨ìˆ˜
     setMotor(CH2, 20 + k, FORWARD)
     setMotor(CH1, 20 , BACKWARD)
-def stop():  # ¼­ºê¸ğÅÍ,¸ŞÀÎ¸ğÅÍ Àû¿ë Á¤ÁöÇÔ¼ö
+def stop():  # ì •ì§€í•¨ìˆ˜
     setMotor(CH2, 100 , STOP)
     setMotor(CH1, 100 , STOP)
