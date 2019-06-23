@@ -1,132 +1,237 @@
-import numpy as np
 import cv2
-from numpy import ones, vstack
-from numpy.linalg import lstsq
-from statistics import mean
+import numpy as np
 
-def roi(img, vertices):
+global lx1, lx2, ly1, ly2, gx1, gx2, gy1, gy2, warped_eq1
+lx1, lx2, ly1, ly2, gx1, gy1, gx2, gy2 = int(0), int(0), int(0), int(0),int(0), int(0), int(0), int(0)
+
+def draw(img, lines):
+    cv2.line(img, (lines[0], lines[1]), (lines[2], lines[3]), (0, 255,0), 10)
+
+def ROI(img, vertices, color3=(255, 255, 255), color1=255):
     mask = np.zeros_like(img)
-    cv2.fillPoly(mask, vertices, 255)
 
-    masked = cv2.bitwise_and(img, mask)
-    return masked
+    if len(img.shape) > 2:
+        color = color3
+    else:
+        color = color1
 
+    cv2.fillPoly(mask, vertices, color)
+    ROI_image = cv2.bitwise_and(img, mask)
 
-def draw_lanes(img, lines, color=[0, 255, 255], thickness=3):
-    try:
-        ys = []
-        for i in lines:
-            for ii in i:
-                ys += [ii[1], ii[3]]
-        min_y = min(ys)
-        max_y = 400
-        new_lines = []
-        line_dict = {}
+    return ROI_image
 
-        for idx, i in enumerate(lines):
-            for xyxy in i:
-                x_coords = (xyxy[0], xyxy[2])
-                y_coords = (xyxy[1], xyxy[3])
-                A = vstack([x_coords, ones(len(x_coords))]).T
-                m, b = lstsq(A, y_coords)[0]
+def get_fitline_right(img, f_lines):
+    global gx1, gx2, gy1, gy2
+    lines = f_lines.reshape(f_lines.shape[0] * 2, 2)
+    vx, vy, x, y = cv2.fitLine(lines, cv2.DIST_L2, 0, 0.01, 0.01)
 
-                x1 = (min_y - b) / m
-                x2 = (max_y - b) / m
+    if lines.shape[0] != 0:
+        x1, y1 = int(((img.shape[0] - 1) - y) / vy * vx + x), img.shape[0] - 1
+        x2, y2 = int(((img.shape[0] / 2 + 100) - y) / vy * vx + x), int(img.shape[0] / 2 + 100)
+        gx1, gy1, gx2, gy2 = x1, y1, x2, y2
 
-                line_dict[idx] = [m, b, [int(x1), min_y, int(x2), max_y]]
-                new_lines.append([int(x1), min_y, int(x2), max_y])
+    else:
+        if gx1 == 0 and gx2 == 0 and gy1 == 0 and gy2 == 0:
+            x1, y1 = img.shape[1] / 2, img.shape[0] / 2
+            x2, y2 = img.shape[1] / 2, img.shape[0] / 2
+        else:
+            x1, y1, x2, y2 = gx1, gy1, gx2, gy2
 
-        final_lanes = {}
+    result = [x1, y1, x2, y2, (x1 + x2) / 2, (y1 + y2) / 2]
+    return result
 
-        for idx in line_dict:
-            final_lanes_copy = final_lanes.copy()
-            m = line_dict[idx][0]
-            b = line_dict[idx][1]
-            line = line_dict[idx][2]
+def get_fitline_left(img, f_lines):
+    global lx1, lx2, ly1, ly2
+    lines = f_lines.reshape(f_lines.shape[0] * 2, 2)
+    vx, vy, x, y = cv2.fitLine(lines, cv2.DIST_L2, 0, 0.01, 0.01)
 
-            if len(final_lanes) == 0:
-                final_lanes[m] = [[m, b, line]]
+    if lines.shape[0] != 0:
+        x1, y1 = int(((img.shape[0] - 1) - y) / vy * vx + x), img.shape[0] - 1
+        x2, y2 = int(((img.shape[0] / 2 + 100) - y) / vy * vx + x), int(img.shape[0] / 2 + 100)
+        lx1, ly1, lx2, ly2 = x1, y1, x2, y2
 
-            else:
-                found_copy = False
+    else:
+        if lx1 == 0 and lx2 == 0 and ly1 == 0 and ly2 == 0:
+            x1, y1 = img.shape[1] / 2, img.shape[0] / 2
+            x2, y2 = img.shape[1] / 2, img.shape[0] / 2
+        else:
+            x1, y1, x2, y2 = lx1, ly1, lx2, ly2
 
-                for other_ms in final_lanes_copy:
+    result = [x1, y1, x2, y2, (x1 + x2) / 2, (y1 + y2) / 2]
+    return result
 
-                    if not found_copy:
-                        if abs(other_ms * 1.2) > abs(m) > abs(other_ms * 0.8):
-                            if abs(final_lanes_copy[other_ms][0][1] * 1.2) > abs(b) > abs(
-                                    final_lanes_copy[other_ms][0][1] * 0.8):
-                                final_lanes[other_ms].append([m, b, line])
-                                found_copy = True
-                                break
-                        else:
-                            final_lanes[m] = [[m, b, line]]
+def get_lane(img):
 
-        line_counter = {}
+    global line
 
-        for lanes in final_lanes:
-            line_counter[lanes] = len(final_lanes[lanes])
+    height, weight = img.shape[:2]
 
-        top_lanes = sorted(line_counter.items(), key=lambda item: item[1])[::-1][:2]
+    canny_img = cv2.Canny(img, 380, 450)
 
-        lane1_id = top_lanes[0][0]
-        lane2_id = top_lanes[1][0]
-
-        def average_lane(lane_data):
-            x1s = []
-            y1s = []
-            x2s = []
-            y2s = []
-            for data in lane_data:
-                x1s.append(data[2][0])
-                y1s.append(data[2][1])
-                x2s.append(data[2][2])
-                y2s.append(data[2][3])
-            return int(mean(x1s)), int(mean(y1s)), int(mean(x2s)), int(mean(y2s))
-
-        l1_x1, l1_y1, l1_x2, l1_y2 = average_lane(final_lanes[lane1_id])
-        l2_x1, l2_y1, l2_x2, l2_y2 = average_lane(final_lanes[lane2_id])
-        return [l1_x1, l1_y1, l1_x2, l1_y2], [l2_x1, l2_y1, l2_x2, l2_y2], lane1_id, lane2_id
-    except Exception as e:
-        print(str(e))
+    vertices = np.array([[(0, height), (0, height / 2), (weight, height / 2), (weight, height)]],
+                        dtype=np.int32)
 
 
-def process_img(image):
-    height, width = image.shape[:2]
-    original_image = image
+    ROI_img = ROI(canny_img, vertices)
+    img = cv2.polylines(img, vertices, True, (255, 0 ,0), 5)
+    line_arr = cv2.HoughLinesP(ROI_img, 1, np.pi / 180, 50, minLineLength=10, maxLineGap=50)
 
-    processed_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if type(line_arr).__name__ == 'NoneType':
+        line_arr = line
+    elif line_arr.shape[0] != 1:
+        line_arr = np.squeeze(line_arr)
+        line = line_arr
+    elif line_arr.shape[0] == 1:
+        line_arr = np.squeeze(line_arr, axis=1)
+        line = line_arr
 
-    processed_img = cv2.Canny(processed_img, threshold1=300, threshold2=300)
+    slope_degree = (np.arctan2(line_arr[:, 1] - line_arr[:, 3], line_arr[:, 0] - line_arr[:, 2]) * 180) / np.pi
 
-    processed_img = cv2.GaussianBlur(processed_img, (5, 5), 0)
-    vertices = np.array([[0,400],[50, 140],[200,140],[440,140] ,[590, 140], [640, 400] ], np.int32)
-    processed_img = roi(processed_img, [vertices])
-    lines = cv2.HoughLinesP(processed_img, 1, np.pi / 180, 180, 20, 15)
+    line_arr1,line_arr2,slope_degree1,slope_degree2 = line_arr,line_arr,slope_degree,slope_degree
+    line_arr1 = line_arr1[np.abs(slope_degree1) < 180]
+    slope_degree1 = slope_degree1[np.abs(slope_degree1) < 180]
+    line_arr1 = line_arr1[np.abs(slope_degree1) > 90]
+    slope_degree1 = slope_degree1[np.abs(slope_degree1) >90]
 
-    m1 = 0
-    m2 = 0
-    try:
-        l1, l2, m1, m2 = draw_lanes(original_image, lines)
-        cv2.line(original_image, (l1[0], l1[1]), (l1[2], l1[3]), [0, 255, 0], 30)
-        cv2.line(original_image, (l2[0], l2[1]), (l2[2], l2[3]), [0, 255, 0], 30)
+    line_arr2 = line_arr2[np.abs(slope_degree2) > 0]
+    slope_degree2 = slope_degree2[np.abs(slope_degree2) > 0]
+    line_arr2 = line_arr2[np.abs(slope_degree2) < 90]
+    slope_degree2 = slope_degree2[np.abs(slope_degree2) < 90]
 
-    except Exception as e:
-        print(str(e))
-        pass
+    if line_arr1.shape[0]!=0 and line_arr2.shape[0]!=0:
+        line_arr = np.concatenate((line_arr1,line_arr1),axis=0)
+        slope_degree = np.concatenate((slope_degree2,slope_degree1),axis=0)
 
-    try:
-        for coords in lines:
-            coords = coords[0]
-            try:
-                cv2.line(processed_img, (coords[0], coords[1]), (coords[2], coords[3]), [255, 0, 0], 3)
+    elif line_arr1.shape[0]!=0 and line_arr2.shape[0]==0:
 
-            except Exception as e:
-                print(str(e))
-    except Exception as e:
-        pass
+        line_arr = line_arr1
+        slope_degree =  slope_degree1
+    elif line_arr1.shape[0]==0 and line_arr2.shape[0]!=0:
+        line_arr = line_arr2
+        slope_degree = slope_degree2
 
-    return processed_img, original_image, m1, m2
+    else:
+
+        line_arr = line_arr[np.abs(slope_degree) < 160]
+        slope_degree = slope_degree[np.abs(slope_degree) < 160]
+        line_arr = line_arr[np.abs(slope_degree) >30]
+        slope_degree = slope_degree[np.abs(slope_degree)>30]
+
+    L_lines, R_lines = line_arr[(slope_degree > 0), :], line_arr[(slope_degree < 0), :]
+
+    if L_lines.shape[0]!=0 and R_lines.shape[0]==0:
+
+        vertices = np.array([[(0, height), (0, height / 2), (weight / 2, height / 2), (weight / 2, height)]],
+                            dtype=np.int32)
+        ROI_img = ROI(canny_img, vertices)
+        line_arr = cv2.HoughLinesP(ROI_img, 1, np.pi / 180, 50, minLineLength=10, maxLineGap=50)
+        if type(line_arr).__name__ == 'NoneType':
+            line_arr = line
+        elif line_arr.shape[0] != 1:
+            line_arr = np.squeeze(line_arr)
+            line = line_arr
+        elif line_arr.shape[0] == 1:
+            line_arr = np.squeeze(line_arr, axis=1)
+            line = line_arr
+
+        slope_degree = (np.arctan2(line_arr[:, 1] - line_arr[:, 3], line_arr[:, 0] - line_arr[:, 2]) * 180) / np.pi
+
+        line_arr1, line_arr2, slope_degree1, slope_degree2 = line_arr, line_arr, slope_degree, slope_degree
+
+        line_arr1 = line_arr1[np.abs(slope_degree1) < 160]
+        slope_degree1 = slope_degree1[np.abs(slope_degree1) < 160]
+        line_arr1 = line_arr1[np.abs(slope_degree1) > 90]
+        slope_degree1 = slope_degree1[np.abs(slope_degree1) > 90]
+
+        line_arr2 = line_arr2[np.abs(slope_degree2) > 30]
+        slope_degree2 = slope_degree2[np.abs(slope_degree2) > 30]
+        line_arr2 = line_arr2[np.abs(slope_degree2) < 90]
+        slope_degree2 = slope_degree2[np.abs(slope_degree2) < 90]
+
+        if line_arr1.shape[0] != 0 and line_arr2.shape[0] != 0:
+            line_arr = np.concatenate((line_arr1, line_arr1), axis=0)
+            slope_degree = np.concatenate((slope_degree2, slope_degree1), axis=0)
+
+        elif line_arr1.shape[0] != 0 and line_arr2.shape[0] == 0:
+            line_arr = line_arr1
+            slope_degree = slope_degree1
+        elif line_arr1.shape[0] == 0 and line_arr2.shape[0] != 0:
+            line_arr = line_arr2
+            slope_degree = slope_degree2
+        else:
+            line_arr = line_arr[np.abs(slope_degree) < 160]
+            slope_degree = slope_degree[np.abs(slope_degree) < 160]
+            line_arr = line_arr[np.abs(slope_degree) > 30]
+            slope_degree = slope_degree[np.abs(slope_degree) > 30]
+
+        L_lines, R_lines = line_arr[(slope_degree > 0), :], np.array([[weight,height, weight, height*0.7]])
+
+    elif L_lines.shape[0]==0 and R_lines.shape[0]!=0:
+
+        vertices = np.array([[(0, height), (0, height / 2), (weight / 2, height / 2), (weight / 2, height)]],
+                            dtype=np.int32)
+
+        ROI_img = ROI(canny_img, vertices)
+        line_arr = cv2.HoughLinesP(ROI_img, 1, np.pi / 180, 50, minLineLength=10, maxLineGap=50)
+        if type(line_arr).__name__ == 'NoneType':
+            line_arr = line
+        elif line_arr.shape[0] != 1:
+            line_arr = np.squeeze(line_arr)
+            line = line_arr
+        elif line_arr.shape[0] == 1:
+            line_arr = np.squeeze(line_arr, axis=1)
+            line = line_arr
+
+        slope_degree = (np.arctan2(line_arr[:, 1] - line_arr[:, 3], line_arr[:, 0] - line_arr[:, 2]) * 180) / np.pi
+
+        line_arr1, line_arr2, slope_degree1, slope_degree2 = line_arr, line_arr, slope_degree, slope_degree
+
+        line_arr1 = line_arr1[np.abs(slope_degree1) < 160]
+        slope_degree1 = slope_degree1[np.abs(slope_degree1) < 160]
+        line_arr1 = line_arr1[np.abs(slope_degree1) > 90]
+        slope_degree1 = slope_degree1[np.abs(slope_degree1) > 90]
+
+        line_arr2 = line_arr2[np.abs(slope_degree2) > 30]
+        slope_degree2 = slope_degree2[np.abs(slope_degree2) > 30]
+        line_arr2 = line_arr2[np.abs(slope_degree2) < 90]
+        slope_degree2 = slope_degree2[np.abs(slope_degree2) < 90]
+
+        if line_arr1.shape[0] != 0 and line_arr2.shape[0] != 0:
+            line_arr = np.concatenate((line_arr1, line_arr1), axis=0)
+            slope_degree = np.concatenate((slope_degree2, slope_degree1), axis=0)
+
+        elif line_arr1.shape[0] != 0 and line_arr2.shape[0] == 0:
+            line_arr = line_arr1
+            slope_degree = slope_degree1
+        elif line_arr1.shape[0] == 0 and line_arr2.shape[0] != 0:
+            line_arr = line_arr2
+            slope_degree = slope_degree2
+        else:
+            line_arr = line_arr[np.abs(slope_degree) < 160]
+            slope_degree = slope_degree[np.abs(slope_degree) < 160]
+            line_arr = line_arr[np.abs(slope_degree) > 30]
+            slope_degree = slope_degree[np.abs(slope_degree) > 30]
+
+        L_lines, R_lines = np.array([[0, height, 0, height*0.7]]), line_arr[(slope_degree < 0), :]
 
 
 
+    left_fit_line = get_fitline_left(img, L_lines)
+    right_fit_line = get_fitline_right(img, R_lines)
+
+    draw(img, right_fit_line[:4])
+    draw(img, right_fit_line[:4])
+    draw(img, left_fit_line[:4])
+    center_x_point = int((left_fit_line[4] + right_fit_line[4]) / 2)
+    center_y_point = int((left_fit_line[5] + right_fit_line[5]) / 2)
+    result = cv2.circle(img, (center_x_point, center_y_point), 5, (0, 0, 255), -1)
+
+    center_x_point = str(center_x_point)
+    if len(center_x_point) == 1:
+        center_x_point = "000"+center_x_point
+    elif len(center_x_point) == 2:
+        center_x_point = "00"+center_x_point
+    elif len(center_x_point) == 3:
+        center_x_point = "0"+center_x_point
+
+    return result, center_x_point
