@@ -1,5 +1,7 @@
 import cv2
 import socket
+import numpy as np
+from PIL import ImageGrab
 from line import get_lane
 
 
@@ -10,12 +12,11 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_address = (ip, 6152)
 sock.connect(server_address)
 
-cap = cv2.VideoCapture(1)
 
 
-while cap.isOpened():
-    ret, frame = cap.read()
-
+while True:
+    frame = ImageGrab.grab(bbox=(0, 0, 800, 630))
+    frame=np.array(frame)
     frame = cv2.resize(frame, (800, 600))
 
     try:
@@ -28,7 +29,6 @@ while cap.isOpened():
 
     cv2.imshow('window', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
+        cv2.destroyAllWindows()
         break
 
-cv2.destroyAllWindows()
-cap.release()
